@@ -1,0 +1,77 @@
+# .gitignore for WhisperTrans
+
+## .NET
+bin/
+obj/
+*.user
+*.suo
+*.userprefs
+.vs/
+.vscode/
+*.DotSettings.user
+
+## Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+## Visual Studio cache/options
+.vs/
+.vscode/
+*.rsuser
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+## Rider
+.idea/
+*.sln.iml
+
+## NuGet
+*.nupkg
+*.snupkg
+**/packages/*
+!**/packages/build/
+*.nuget.props
+*.nuget.targets
+
+## Test Results
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+*.trx
+*.coverage
+*.coveragexml
+
+## Whisper Models (large files)
+models/*.bin
+models/*.pt
+!models/README.md
+
+## Temporary files
+*.tmp
+*.temp
+*.log
+*.bak
+*.swp
+*~
+
+## OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+## Application specific
+appsettings.Development.json
+appsettings.Production.json
+*.db
+*.db-shm
+*.db-wal

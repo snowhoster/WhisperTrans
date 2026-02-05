@@ -1,0 +1,413 @@
+﻿<Window x:Class="WhisperTrans.Desktop.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:WhisperTrans.Desktop.Controls"
+        mc:Ignorable="d"
+        Title="WhisperTrans - 即時語音轉文字系統" Height="700" Width="1400"
+        WindowStartupLocation="CenterScreen">
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="59*"/>
+            <RowDefinition Height="74*"/>
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="2*"/>
+            <ColumnDefinition Width="5"/>
+            <ColumnDefinition Width="1*" MinWidth="350"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- 左側主要區域 -->
+        <Grid Grid.Column="0" Grid.ColumnSpan="2" Margin="0,0,5,0" Grid.RowSpan="2">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- 配置區域 -->
+            <GroupBox Header="配置" Grid.Row="0" Margin="0,0,0,10">
+                <Grid Margin="10">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- 音訊來源 -->
+                    <TextBlock Text="音訊來源:" Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                    <ComboBox x:Name="AudioDeviceComboBox" Grid.Row="0" Grid.Column="1" 
+                              Margin="0,0,10,5" Padding="5" SelectionChanged="AudioDeviceComboBox_SelectionChanged"/>
+                    <Button x:Name="RefreshDevicesButton" Grid.Row="0" Grid.Column="2" 
+                            Content="🔄 重新整理" Width="90" Click="RefreshDevicesButton_Click" Margin="0,0,5,5"/>
+
+                    <!-- 模型路徑 -->
+                    <TextBlock Text="模型路徑:" Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                    <TextBox x:Name="ModelPathTextBox" Grid.Row="1" Grid.Column="1" 
+                             Text="models/ggml-base.bin" Margin="0,0,10,5" Padding="5"/>
+                    <Button x:Name="BrowseModelButton" Grid.Row="1" Grid.Column="2" 
+                            Content="瀏覽..." Width="80" Click="BrowseModelButton_Click" Margin="0,0,5,5"/>
+                    <Button x:Name="DownloadModelButton" Grid.Row="1" Grid.Column="3" 
+                            Content="下載模型..." Width="90" Click="DownloadModelButton_Click" Margin="0,0,0,5"
+                            Background="#FF03A9F4" Foreground="White"/>
+
+                    <!-- 語言選擇 -->
+                    <TextBlock Text="語言:" Grid.Row="2" Grid.Column="0" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                    <ComboBox x:Name="LanguageComboBox" Grid.Row="2" Grid.Column="1" 
+                              SelectedIndex="1" Margin="0,0,10,5" Padding="5">
+                        <ComboBoxItem Content="自動偵測" Tag="auto"/>
+                        <ComboBoxItem Content="繁體中文" Tag="zh"/>
+                        <ComboBoxItem Content="英文" Tag="en"/>
+                        <ComboBoxItem Content="日文" Tag="ja"/>
+                        <ComboBoxItem Content="韓文" Tag="ko"/>
+                        <ComboBoxItem Content="簡體中文" Tag="zh-CN"/>
+                        <ComboBoxItem Content="法文" Tag="fr"/>
+                        <ComboBoxItem Content="德文" Tag="de"/>
+                        <ComboBoxItem Content="西班牙文" Tag="es"/>
+                        <ComboBoxItem Content="俄文" Tag="ru"/>
+                    </ComboBox>
+
+                    <!-- 選項 -->
+                    <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Horizontal" Margin="0,5,0,0">
+                        <CheckBox x:Name="UseGpuCheckBox" Content="使用 GPU 加速" IsChecked="True" Margin="0,0,20,0"/>
+                        <CheckBox x:Name="EnableVadCheckBox" Content="啟用語音活動檢測 (VAD)" IsChecked="True"/>
+                    </StackPanel>
+
+                    <!-- 初始化按鈕 -->
+                    <Button x:Name="InitializeButton" Grid.Row="3" Grid.Column="2" Grid.ColumnSpan="2"
+                            Content="初始化" Width="175" Click="InitializeButton_Click" 
+                            Background="#FF4CAF50" Foreground="White" FontWeight="Bold"/>
+                </Grid>
+            </GroupBox>
+
+            <!-- 音訊視覺化區域 -->
+            <GroupBox Header="音訊監控" Grid.Row="1" Margin="0,0,0,10">
+                <Grid Margin="10">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="60"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- 裝置資訊 -->
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10">
+                        <TextBlock Text="🎤 目前裝置: " FontWeight="Bold" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="CurrentDeviceText" Text="未選擇" VerticalAlignment="Center" Margin="5,0,20,0"/>
+                        <TextBlock Text="📊 狀態: " FontWeight="Bold" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="AudioStatusText" Text="待機中" VerticalAlignment="Center" Margin="5,0,0,0"/>
+                        <Ellipse x:Name="SpeechIndicator" Width="12" Height="12" Fill="Gray" Margin="10,0,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+
+                    <!-- 音訊視覺化 -->
+                    <Border Grid.Row="1" BorderBrush="#FFBDBDBD" BorderThickness="1" Background="#FFF5F5F5" CornerRadius="4">
+                        <local:AudioVisualizer x:Name="AudioVisualizer" Margin="5"/>
+                    </Border>
+                </Grid>
+            </GroupBox>
+
+            <!-- 轉錄結果區域 -->
+            <GroupBox Header="轉錄結果" Grid.Row="2" Margin="0,0,0,10">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <TextBox x:Name="TranscriptionTextBox" 
+                             TextWrapping="Wrap" 
+                             AcceptsReturn="True" 
+                             IsReadOnly="False"
+                             VerticalAlignment="Stretch"
+                             FontSize="14"
+                             Padding="10"
+                             Background="#FFF9F9F9"/>
+                </ScrollViewer>
+            </GroupBox>
+
+            <!-- 控制按鈕 -->
+            <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,10">
+                <Button x:Name="StartStopButton" 
+                        Content="🎤 開始錄音" 
+                        Width="120" Height="40" 
+                        Margin="5" 
+                        Click="StartStopButton_Click"
+                        Background="#FF2196F3" 
+                        Foreground="White"
+                        FontSize="14"
+                        FontWeight="Bold"/>
+                <Button x:Name="ClearButton" 
+                        Content="清除" 
+                        Width="100" Height="40" 
+                        Margin="5" 
+                        Click="ClearButton_Click"
+                        Background="#FFFF9800" 
+                        Foreground="White"
+                        FontSize="14"/>
+                <Button x:Name="ExportButton" 
+                        Content="匯出文字" 
+                        Width="100" Height="40" 
+                        Margin="5" 
+                        Click="ExportButton_Click"
+                        Background="#FF9C27B0" 
+                        Foreground="White"
+                        FontSize="14"/>
+            </StackPanel>
+
+            <!-- 狀態列 -->
+            <Border Grid.Row="4" Background="#FF263238" Padding="10,5">
+                <TextBlock x:Name="StatusText" 
+                           Text="請先初始化系統" 
+                           Foreground="White" 
+                           FontSize="12"/>
+            </Border>
+        </Grid>
+
+        <!-- 分隔線 -->
+        <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" Background="#FFEEEEEE" Grid.ColumnSpan="2" Margin="0,0,458,0" Grid.RowSpan="2"/>
+
+        <!-- 右側翻譯區域 -->
+        <Grid Grid.Column="2" Grid.RowSpan="2">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- 大語言模型設定 -->
+            <GroupBox Header="🤖 大語言模型翻譯" Grid.Row="0" Margin="0,0,0,10">
+                <StackPanel Margin="10">
+                    <!-- 啟用翻譯 -->
+                    <CheckBox x:Name="EnableTranslationCheckBox" 
+                              Content="啟用即時翻譯" 
+                              FontWeight="Bold"
+                              Margin="0,0,0,10"
+                              Checked="EnableTranslationCheckBox_CheckedChanged"
+                              Unchecked="EnableTranslationCheckBox_CheckedChanged"/>
+
+                    <!-- LLM 提供商 -->
+                    <TextBlock Text="LLM 提供商:" Margin="0,5,0,3"/>
+                    <ComboBox x:Name="LLMProviderComboBox" 
+                              Padding="5" 
+                              Margin="0,0,0,10"
+                              SelectionChanged="LLMProviderComboBox_SelectionChanged">
+                        <ComboBoxItem Content="OpenAI (GPT)" Tag="openai" IsSelected="True"/>
+                        <ComboBoxItem Content="Azure OpenAI" Tag="azure"/>
+                        <ComboBoxItem Content="Anthropic (Claude)" Tag="anthropic"/>
+                        <ComboBoxItem Content="Google (Gemini)" Tag="google"/>
+                        <ComboBoxItem Content="本地模型 (Ollama)" Tag="ollama"/>
+                        <ComboBoxItem Content="本地模型 (vLLM)" Tag="vllm"/>
+                        <ComboBoxItem Content="自訂 API" Tag="custom"/>
+                    </ComboBox>
+
+                    <!-- API URL -->
+                    <TextBlock Text="API URL:" Margin="0,5,0,3"/>
+                    <TextBox x:Name="ApiUrlTextBox" 
+                             Padding="5" 
+                             Margin="0,0,0,10"
+                             Text="https://api.openai.com/v1/chat/completions"
+                             ToolTip="大語言模型 API 端點"/>
+
+                    <!-- API Key -->
+                    <Grid Margin="0,5,0,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Text="API Key:" Grid.Row="0" Grid.Column="0" Margin="0,0,0,3"/>
+                        <CheckBox x:Name="ShowApiKeyCheckBox" 
+                                  Content="👁️ 顯示" 
+                                  Grid.Row="0" Grid.Column="1"
+                                  VerticalAlignment="Center"
+                                  Margin="5,0,0,0"
+                                  Checked="ShowApiKeyCheckBox_CheckedChanged"
+                                  Unchecked="ShowApiKeyCheckBox_CheckedChanged"/>
+
+                        <PasswordBox x:Name="ApiKeyPasswordBox" 
+                                     Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                                     Padding="5"
+                                     ToolTip="您的 API 金鑰"/>
+                        <TextBox x:Name="ApiKeyTextBox" 
+                                 Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                                 Padding="5"
+                                 Visibility="Collapsed"
+                                 ToolTip="您的 API 金鑰"/>
+                    </Grid>
+
+                    <!-- 翻譯目標語言 -->
+                    <TextBlock Text="翻譯成:" Margin="0,5,0,3"/>
+                    <ComboBox x:Name="TranslationTargetComboBox" 
+                              Padding="5" 
+                              Margin="0,0,0,10"
+                              SelectedIndex="0">
+                        <ComboBoxItem Content="繁體中文" Tag="zh-TW"/>
+                        <ComboBoxItem Content="簡體中文" Tag="zh-CN"/>
+                        <ComboBoxItem Content="英文" Tag="en"/>
+                        <ComboBoxItem Content="日文" Tag="ja"/>
+                        <ComboBoxItem Content="韓文" Tag="ko"/>
+                        <ComboBoxItem Content="法文" Tag="fr"/>
+                        <ComboBoxItem Content="德文" Tag="de"/>
+                        <ComboBoxItem Content="西班牙文" Tag="es"/>
+                        <ComboBoxItem Content="俄文" Tag="ru"/>
+                    </ComboBox>
+
+                    <!-- 模型名稱 -->
+                    <TextBlock Text="模型名稱:" Margin="0,5,0,3"/>
+                    <TextBox x:Name="ModelNameTextBox" 
+                             Padding="5" 
+                             Margin="0,0,0,10"
+                             Text="gpt-3.5-turbo"
+                             ToolTip="使用的模型名稱"/>
+
+                    <!-- 快速設定提示 -->
+                    <Border Background="#FFFFEB3B" 
+                            Padding="8" 
+                            CornerRadius="4" 
+                            Margin="0,0,0,10">
+                        <StackPanel>
+                            <TextBlock Text="💡 快速開始提示" 
+                                       FontWeight="Bold" 
+                                       FontSize="11"
+                                       Margin="0,0,0,3"/>
+                            <TextBlock Text="1. 輸入您的 API Key" 
+                                       FontSize="10" 
+                                       TextWrapping="Wrap"/>
+                            <TextBlock Text="2. 選擇翻譯目標語言" 
+                                       FontSize="10" 
+                                       TextWrapping="Wrap"/>
+                            <TextBlock Text="3. 點擊測試連線" 
+                                       FontSize="10" 
+                                       TextWrapping="Wrap"/>
+                            <TextBlock Text="4. 勾選啟用即時翻譯" 
+                                       FontSize="10" 
+                                       TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 測試連線按鈕 -->
+                    <Button x:Name="TestConnectionButton" 
+                            Content="🔌 測試連線" 
+                            Padding="10,5"
+                            Margin="0,0,0,5"
+                            Click="TestConnectionButton_Click"
+                            Background="#FF607D8B" 
+                            Foreground="White"/>
+
+                    <!-- 載入/儲存設定 -->
+                    <Grid Margin="0,5,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Button x:Name="SaveSettingsButton" 
+                                Content="💾 儲存設定" 
+                                Grid.Column="0"
+                                Padding="5"
+                                Margin="0,0,2,0"
+                                Click="SaveSettingsButton_Click"
+                                Background="#FF4CAF50" 
+                                Foreground="White"
+                                FontSize="11"/>
+                        <Button x:Name="LoadSettingsButton" 
+                                Content="📂 載入設定" 
+                                Grid.Column="1"
+                                Padding="5"
+                                Margin="2,0,0,0"
+                                Click="LoadSettingsButton_Click"
+                                Background="#FF2196F3" 
+                                Foreground="White"
+                                FontSize="11"/>
+                    </Grid>
+                </StackPanel>
+            </GroupBox>
+
+            <!-- 翻譯結果區域 -->
+            <GroupBox Header="📝 翻譯結果" Grid.Row="1" Margin="0,0,0,10">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <TextBox x:Name="TranslationTextBox" 
+                             TextWrapping="Wrap" 
+                             AcceptsReturn="True" 
+                             IsReadOnly="False"
+                             VerticalAlignment="Stretch"
+                             FontSize="14"
+                             Padding="10"
+                             Background="#FFFFF9E6"/>
+                </ScrollViewer>
+            </GroupBox>
+
+            <!-- 翻譯控制 -->
+            <StackPanel Grid.Row="2" Margin="0,0,0,0">
+                <!-- TTS 控制 -->
+                <GroupBox Header="🔊 語音朗讀" Margin="0,0,0,10">
+                    <StackPanel Margin="5">
+                        <!-- 啟用 TTS -->
+                        <CheckBox x:Name="EnableTtsCheckBox" 
+                                  Content="啟用自動朗讀翻譯" 
+                                  FontSize="11"
+                                  Margin="0,0,0,5"/>
+
+                        <!-- TTS 控制按鈕 -->
+                        <Grid Margin="0,5,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Button x:Name="SpeakTranscriptionButton" 
+                                    Content="🔊 朗讀轉錄" 
+                                    Grid.Column="0"
+                                    Padding="5,3"
+                                    Margin="0,0,2,0"
+                                    Click="SpeakTranscriptionButton_Click"
+                                    Background="#FF00BCD4" 
+                                    Foreground="White"
+                                    FontSize="10"/>
+                            <Button x:Name="SpeakTranslationButton" 
+                                    Content="🔊 朗讀翻譯" 
+                                    Grid.Column="1"
+                                    Padding="5,3"
+                                    Margin="2,0,0,0"
+                                    Click="SpeakTranslationButton_Click"
+                                    Background="#FF00BCD4" 
+                                    Foreground="White"
+                                    FontSize="10"/>
+                        </Grid>
+
+                        <!-- 停止按鈕 -->
+                        <Button x:Name="StopSpeakingButton" 
+                                Content="⏹️ 停止朗讀" 
+                                Padding="5,3"
+                                Margin="0,3,0,0"
+                                Click="StopSpeakingButton_Click"
+                                Background="#FFFF5722" 
+                                Foreground="White"
+                                FontSize="10"/>
+                    </StackPanel>
+                </GroupBox>
+
+                <Button x:Name="ClearTranslationButton" 
+                        Content="清除翻譯" 
+                        Padding="10,5"
+                        Margin="0,0,0,5"
+                        Click="ClearTranslationButton_Click"
+                        Background="#FFFF9800" 
+                        Foreground="White"/>
+
+                <Button x:Name="ExportTranslationButton" 
+                        Content="匯出翻譯" 
+                        Padding="10,5"
+                        Click="ExportTranslationButton_Click"
+                        Background="#FF9C27B0" 
+                        Foreground="White"/>
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Window>
+
