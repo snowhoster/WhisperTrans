@@ -16,7 +16,7 @@ namespace WhisperTrans.Desktop;
 /// </summary>
 public partial class MainWindow : Window
 {
-    private WhisperNetEngine? _whisperEngine;
+    private IWhisperEngine? _whisperEngine;
     private NAudioCapture? _audioCapture;
     private RealtimeTranscriptionService? _transcriptionService;
     private VoiceActivityDetector? _vad;
@@ -159,14 +159,6 @@ public partial class MainWindow : Window
             StatusText.Text = "初始化中...";
             InitializeButton.IsEnabled = false;
 
-            var modelPath = ModelPathTextBox.Text;
-            if (string.IsNullOrWhiteSpace(modelPath))
-            {
-                MessageBox.Show("請輸入模型檔案路徑", "錯誤", MessageBoxButton.OK, MessageBoxImage.Error);
-                InitializeButton.IsEnabled = true;
-                return;
-            }
-
             // 檢查是否選擇了音訊裝置
             if (_audioDevices.Count == 0)
             {
@@ -176,51 +168,15 @@ public partial class MainWindow : Window
                 return;
             }
 
-            // 自動下載模型（如果不存在）
-            if (!File.Exists(modelPath))
-            {
-                var result = MessageBox.Show(
-                    $"找不到模型檔案：{modelPath}\n\n是否要自動下載模型？\n\n模型：{Path.GetFileName(modelPath)}\n預估大小：{ModelDownloader.GetEstimatedModelSize(Path.GetFileName(modelPath))} MB",
-                    "模型不存在",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Question);
+            // 取得引擎類型
+            var engineType = (WhisperEngineComboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() == "remote"
+                ? WhisperEngineType.Remote
+                : WhisperEngineType.Local;
 
-                if (result == MessageBoxResult.Yes)
-                {
-                    try
-                    {
-                        var progress = new Progress<DownloadProgress>(p =>
-                        {
-                            Dispatcher.Invoke(() =>
-                            {
-                                StatusText.Text = p.FormattedMessage;
-                            });
-                        });
-
-                        await _modelDownloader!.EnsureModelExistsAsync(modelPath, progress);
-                        
-                        MessageBox.Show("模型下載完成！", "成功", MessageBoxButton.OK, MessageBoxImage.Information);
-                    }
-                    catch (Exception ex)
-                    {
-                        MessageBox.Show($"模型下載失敗: {ex.Message}\n\n請手動下載模型檔案:\n1. 訪問: https://huggingface.co/ggerganov/whisper.cpp\n2. 下載 {Path.GetFileName(modelPath)}\n3. 放置於: {Path.GetDirectoryName(modelPath)}", 
-                            "下載錯誤", MessageBoxButton.OK, MessageBoxImage.Error);
-                        InitializeButton.IsEnabled = true;
-                        StatusText.Text = "模型下載失敗";
-                        return;
-                    }
-                }
-                else
-                {
-                    InitializeButton.IsEnabled = true;
-                    StatusText.Text = "請選擇有效的模型檔案";
-                    return;
-                }
-            }
-
+            // 建立配置
             var config = new WhisperConfig
             {
-                ModelPath = modelPath,
+                EngineType = engineType,
                 Language = GetSelectedLanguage(),
                 UseGpu = UseGpuCheckBox.IsChecked ?? false,
                 SegmentDuration = 2.0,
@@ -230,14 +186,95 @@ public partial class MainWindow : Window
                 MinSilenceDurationMs = 500
             };
 
-            _whisperEngine = new WhisperNetEngine();
-            await _whisperEngine.InitializeAsync(config);
+            // 根據引擎類型設定對應參數
+            if (engineType == WhisperEngineType.Remote)
+            {
+                // 遠端 API 配置
+                var apiUrl = RemoteApiUrlTextBox.Text;
+                if (string.IsNullOrWhiteSpace(apiUrl))
+                {
+                    MessageBox.Show("請輸入遠端 API URL", "錯誤", MessageBoxButton.OK, MessageBoxImage.Error);
+                    InitializeButton.IsEnabled = true;
+                    return;
+                }
 
+                config.RemoteApiUrl = apiUrl;
+                
+                // 初始化遠端引擎
+                _whisperEngine = new RemoteWhisperEngine();
+                await _whisperEngine.InitializeAsync(config);
+
+                StatusText.Text = $"遠端 Whisper ASR 已初始化 - {apiUrl}";
+            }
+            else
+            {
+                // 本地模型配置
+                var modelPath = ModelPathTextBox.Text;
+                if (string.IsNullOrWhiteSpace(modelPath))
+                {
+                    MessageBox.Show("請輸入模型檔案路徑", "錯誤", MessageBoxButton.OK, MessageBoxImage.Error);
+                    InitializeButton.IsEnabled = true;
+                    return;
+                }
+
+                config.ModelPath = modelPath;
+
+                // 自動下載模型（如果不存在）
+                if (!File.Exists(modelPath))
+                {
+                    var result = MessageBox.Show(
+                        $"找不到模型檔案：{modelPath}\n\n是否要自動下載模型？\n\n模型：{Path.GetFileName(modelPath)}\n預估大小：{ModelDownloader.GetEstimatedModelSize(Path.GetFileName(modelPath))} MB",
+                        "模型不存在",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Question);
+
+                    if (result == MessageBoxResult.Yes)
+                    {
+                        try
+                        {
+                            var progress = new Progress<DownloadProgress>(p =>
+                            {
+                                Dispatcher.Invoke(() =>
+                                {
+                                    StatusText.Text = p.FormattedMessage;
+                                });
+                            });
+
+                            await _modelDownloader!.EnsureModelExistsAsync(modelPath, progress);
+                            
+                            MessageBox.Show("模型下載完成！", "成功", MessageBoxButton.OK, MessageBoxImage.Information);
+                        }
+                        catch (Exception ex)
+                        {
+                            MessageBox.Show($"模型下載失敗: {ex.Message}\n\n請手動下載模型檔案:\n1. 訪問: https://huggingface.co/ggerganov/whisper.cpp\n2. 下載 {Path.GetFileName(modelPath)}\n3. 放置於: {Path.GetDirectoryName(modelPath)}", 
+                                "下載錯誤", MessageBoxButton.OK, MessageBoxImage.Error);
+                            InitializeButton.IsEnabled = true;
+                            StatusText.Text = "模型下載失敗";
+                            return;
+                        }
+                    }
+                    else
+                    {
+                        InitializeButton.IsEnabled = true;
+                        StatusText.Text = "請選擇有效的模型檔案";
+                        return;
+                    }
+                }
+
+                // 初始化本地引擎
+                _whisperEngine = new WhisperNetEngine();
+                await _whisperEngine.InitializeAsync(config);
+
+                StatusText.Text = $"本地 Whisper.net 已初始化 - {Path.GetFileName(modelPath)}";
+            }
+
+            // 初始化 VAD
             _vad = new VoiceActivityDetector(
                 threshold: config.VadThreshold,
                 minSilenceDurationMs: config.MinSilenceDurationMs
             );
 
+            // 初始化音訊捕捉
             _audioCapture = new NAudioCapture(
                 sampleRate: 16000,
                 channels: 1,
@@ -249,13 +286,14 @@ public partial class MainWindow : Window
             // 訂閱音訊層級事件
             _audioCapture.AudioLevelChanged += OnAudioLevelChanged;
 
+            // 初始化轉錄服務
             _transcriptionService = new RealtimeTranscriptionService(_whisperEngine, _audioCapture);
 
             _transcriptionService.TranscriptionReceived += OnTranscriptionReceived;
             _transcriptionService.PartialTranscriptionReceived += OnPartialTranscriptionReceived;
             _transcriptionService.ErrorOccurred += OnErrorOccurred;
 
-            StatusText.Text = "初始化完成 - 準備開始錄音";
+            StatusText.Text += " - 準備開始錄音";
             AudioStatusText.Text = "就緒";
             UpdateUIState(true);
         }
@@ -1182,5 +1220,142 @@ public partial class MainWindow : Window
         _translationService?.Dispose();
         _ttsService?.Dispose();
         _cts?.Dispose();
+    }
+
+    private void WhisperEngineComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (WhisperEngineComboBox?.SelectedItem is not ComboBoxItem item)
+            return;
+
+        var engineType = item.Tag?.ToString();
+        var isRemote = engineType == "remote";
+
+        // 切換顯示對應的配置控制項
+        if (ModelPathLabel != null && RemoteApiUrlLabel != null &&
+            ModelPathTextBox != null && RemoteApiUrlTextBox != null &&
+            BrowseModelButton != null && DownloadModelButton != null &&
+            TestRemoteApiButton != null)
+        {
+            if (isRemote)
+            {
+                // 顯示遠端 API 配置
+                ModelPathLabel.Visibility = Visibility.Collapsed;
+                ModelPathTextBox.Visibility = Visibility.Collapsed;
+                BrowseModelButton.Visibility = Visibility.Collapsed;
+                DownloadModelButton.Visibility = Visibility.Collapsed;
+
+                RemoteApiUrlLabel.Visibility = Visibility.Visible;
+                RemoteApiUrlTextBox.Visibility = Visibility.Visible;
+                TestRemoteApiButton.Visibility = Visibility.Visible;
+
+                // GPU 選項對遠端 API 無效
+                if (UseGpuCheckBox != null)
+                {
+                    UseGpuCheckBox.IsEnabled = false;
+                    UseGpuCheckBox.ToolTip = "遠端 API 模式下此選項無效";
+                }
+
+                StatusText.Text = "請設定遠端 Whisper ASR API URL";
+            }
+            else
+            {
+                // 顯示本地模型配置
+                ModelPathLabel.Visibility = Visibility.Visible;
+                ModelPathTextBox.Visibility = Visibility.Visible;
+                BrowseModelButton.Visibility = Visibility.Visible;
+                DownloadModelButton.Visibility = Visibility.Visible;
+
+                RemoteApiUrlLabel.Visibility = Visibility.Collapsed;
+                RemoteApiUrlTextBox.Visibility = Visibility.Collapsed;
+                TestRemoteApiButton.Visibility = Visibility.Collapsed;
+
+                // 恢復 GPU 選項
+                if (UseGpuCheckBox != null)
+                {
+                    UseGpuCheckBox.IsEnabled = true;
+                    UseGpuCheckBox.ToolTip = null;
+                }
+
+                StatusText.Text = "請先初始化系統";
+            }
+        }
+    }
+
+    private async void TestRemoteApiButton_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            TestRemoteApiButton.IsEnabled = false;
+            StatusText.Text = "測試遠端 API 連線中...";
+
+            var apiUrl = RemoteApiUrlTextBox.Text;
+            if (string.IsNullOrWhiteSpace(apiUrl))
+            {
+                MessageBox.Show("請先輸入遠端 API URL", "設定錯誤", MessageBoxButton.OK, MessageBoxImage.Warning);
+                StatusText.Text = "請設定遠端 API URL";
+                return;
+            }
+
+            // 建立測試音訊（1 秒的靜音）
+            var sampleRate = 16000;
+            var testAudio = new float[sampleRate];
+            
+            // 建立測試引擎
+            var testConfig = new WhisperConfig
+            {
+                EngineType = WhisperEngineType.Remote,
+                RemoteApiUrl = apiUrl,
+                Language = GetSelectedLanguage()
+            };
+
+            using var testEngine = new RemoteWhisperEngine();
+            await testEngine.InitializeAsync(testConfig);
+
+            // 發送測試請求
+            var testSegment = new AudioSegment
+            {
+                Samples = testAudio,
+                SampleRate = sampleRate,
+                StartTime = 0,
+                Duration = 1.0
+            };
+
+            var result = await testEngine.TranscribeAsync(testSegment);
+
+            MessageBox.Show(
+                $"✓ 連線成功！\n\n" +
+                $"遠端 API 可以正常使用。\n\n" +
+                $"API URL: {apiUrl}\n" +
+                $"處理時間: {result.ProcessingTimeMs:F0}ms",
+                "測試成功",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            
+            StatusText.Text = "遠端 API 連線測試成功";
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"遠端 API 測試失敗: {ex}");
+
+            var errorMessage = $"連線失敗:\n\n{ex.Message}";
+            
+            if (ex.InnerException != null)
+            {
+                errorMessage += $"\n\n詳細錯誤: {ex.InnerException.Message}";
+            }
+
+            errorMessage += "\n\n請檢查：\n" +
+                "1. API URL 是否正確\n" +
+                "2. 遠端服務是否已啟動\n" +
+                "3. 網路連線是否正常\n" +
+                "4. 防火牆設定";
+
+            MessageBox.Show(errorMessage, "測試失敗", MessageBoxButton.OK, MessageBoxImage.Error);
+            StatusText.Text = $"連線測試失敗: {ex.Message}";
+        }
+        finally
+        {
+            TestRemoteApiButton.IsEnabled = true;
+        }
     }
 }

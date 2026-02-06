@@ -36,6 +36,7 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
@@ -44,15 +45,16 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
-                    <!-- 音訊來源 -->
-                    <TextBlock Text="音訊來源:" Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                    <ComboBox x:Name="AudioDeviceComboBox" Grid.Row="0" Grid.Column="1" 
-                              Margin="0,0,10,5" Padding="5" SelectionChanged="AudioDeviceComboBox_SelectionChanged"/>
-                    <Button x:Name="RefreshDevicesButton" Grid.Row="0" Grid.Column="2" 
-                            Content="🔄 重新整理" Width="90" Click="RefreshDevicesButton_Click" Margin="0,0,5,5"/>
+                    <!-- Whisper 引擎類型 -->
+                    <TextBlock Text="Whisper 引擎:" Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                    <ComboBox x:Name="WhisperEngineComboBox" Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="3"
+                              Margin="0,0,0,5" Padding="5" SelectionChanged="WhisperEngineComboBox_SelectionChanged">
+                        <ComboBoxItem Content="本地模型 (Whisper.net)" Tag="local" IsSelected="True"/>
+                        <ComboBoxItem Content="遠端 API (Whisper ASR)" Tag="remote"/>
+                    </ComboBox>
 
-                    <!-- 模型路徑 -->
-                    <TextBlock Text="模型路徑:" Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                    <!-- 本地模型路徑 -->
+                    <TextBlock x:Name="ModelPathLabel" Text="模型路徑:" Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" Margin="0,0,10,0"/>
                     <TextBox x:Name="ModelPathTextBox" Grid.Row="1" Grid.Column="1" 
                              Text="models/ggml-base.bin" Margin="0,0,10,5" Padding="5"/>
                     <Button x:Name="BrowseModelButton" Grid.Row="1" Grid.Column="2" 
@@ -61,9 +63,25 @@
                             Content="下載模型..." Width="90" Click="DownloadModelButton_Click" Margin="0,0,0,5"
                             Background="#FF03A9F4" Foreground="White"/>
 
+                    <!-- 遠端 API URL -->
+                    <TextBlock x:Name="RemoteApiUrlLabel" Text="遠端 API URL:" Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" Margin="0,0,10,0" Visibility="Collapsed"/>
+                    <TextBox x:Name="RemoteApiUrlTextBox" Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2"
+                             Text="http://192.168.12.41:9000/asr" Margin="0,0,10,5" Padding="5" Visibility="Collapsed"
+                             ToolTip="遠端 Whisper ASR API 端點"/>
+                    <Button x:Name="TestRemoteApiButton" Grid.Row="1" Grid.Column="3" 
+                            Content="測試連線" Width="90" Click="TestRemoteApiButton_Click" Margin="0,0,0,5"
+                            Background="#FF00BCD4" Foreground="White" Visibility="Collapsed"/>
+
+                    <!-- 音訊來源 -->
+                    <TextBlock Text="音訊來源:" Grid.Row="2" Grid.Column="0" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                    <ComboBox x:Name="AudioDeviceComboBox" Grid.Row="2" Grid.Column="1" 
+                              Margin="0,0,10,5" Padding="5" SelectionChanged="AudioDeviceComboBox_SelectionChanged"/>
+                    <Button x:Name="RefreshDevicesButton" Grid.Row="2" Grid.Column="2" 
+                            Content="🔄 重新整理" Width="90" Click="RefreshDevicesButton_Click" Margin="0,0,5,5"/>
+
                     <!-- 語言選擇 -->
-                    <TextBlock Text="語言:" Grid.Row="2" Grid.Column="0" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                    <ComboBox x:Name="LanguageComboBox" Grid.Row="2" Grid.Column="1" 
+                    <TextBlock Text="語言:" Grid.Row="3" Grid.Column="0" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                    <ComboBox x:Name="LanguageComboBox" Grid.Row="3" Grid.Column="1" 
                               SelectedIndex="1" Margin="0,0,10,5" Padding="5">
                         <ComboBoxItem Content="自動偵測" Tag="auto"/>
                         <ComboBoxItem Content="繁體中文" Tag="zh"/>
@@ -78,13 +96,13 @@
                     </ComboBox>
 
                     <!-- 選項 -->
-                    <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Horizontal" Margin="0,5,0,0">
+                    <StackPanel Grid.Row="4" Grid.Column="1" Orientation="Horizontal" Margin="0,5,0,0">
                         <CheckBox x:Name="UseGpuCheckBox" Content="使用 GPU 加速" IsChecked="True" Margin="0,0,20,0"/>
                         <CheckBox x:Name="EnableVadCheckBox" Content="啟用語音活動檢測 (VAD)" IsChecked="True"/>
                     </StackPanel>
 
                     <!-- 初始化按鈕 -->
-                    <Button x:Name="InitializeButton" Grid.Row="3" Grid.Column="2" Grid.ColumnSpan="2"
+                    <Button x:Name="InitializeButton" Grid.Row="4" Grid.Column="2" Grid.ColumnSpan="2"
                             Content="初始化" Width="175" Click="InitializeButton_Click" 
                             Background="#FF4CAF50" Foreground="White" FontWeight="Bold"/>
                 </Grid>
