@@ -24,11 +24,13 @@ public partial class MainWindow : Window
     private ITextToSpeechService? _ttsService;
     private bool _isRecording;
     private CancellationTokenSource? _cts;
+    private CancellationTokenSource? _fileTranscriptionCts;
     private ModelDownloader? _modelDownloader;
     private List<AudioDeviceInfo> _audioDevices = new();
     private int _selectedDeviceIndex = -1;
     private DispatcherTimer? _visualizerTimer;
     private bool _isTranslationEnabled;
+    private string? _selectedAudioFilePath;
 
     public MainWindow()
     {
@@ -1039,7 +1041,10 @@ public partial class MainWindow : Window
         StartStopButton.IsEnabled = initialized;
         ClearButton.IsEnabled = initialized;
         ExportButton.IsEnabled = initialized;
-        
+
+        // 初始化完成後才能使用檔案轉錄
+        TranscribeFileButton.IsEnabled = initialized && !string.IsNullOrEmpty(_selectedAudioFilePath);
+
         ModelPathTextBox.IsEnabled = !initialized;
         BrowseModelButton.IsEnabled = !initialized;
         DownloadModelButton.IsEnabled = !initialized;
@@ -1048,6 +1053,122 @@ public partial class MainWindow : Window
         LanguageComboBox.IsEnabled = !initialized;
         UseGpuCheckBox.IsEnabled = !initialized;
         EnableVadCheckBox.IsEnabled = !initialized;
+    }
+
+    // ─── 音訊檔案轉錄 ────────────────────────────────────────────
+
+    private void BrowseAudioFileButton_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "選擇音訊檔案",
+            Filter = FileTranscriptionService.GetSupportedExtensionsFilter()
+        };
+
+        if (dialog.ShowDialog() != true)
+            return;
+
+        _selectedAudioFilePath = dialog.FileName;
+        FileTranscriptionPathTextBox.Text = Path.GetFileName(dialog.FileName);
+        FileTranscriptionPathTextBox.Foreground = System.Windows.Media.Brushes.Black;
+        FileTranscriptionPathTextBox.ToolTip = dialog.FileName;
+
+        // 初始化完成後才啟用轉錄按鈕
+        TranscribeFileButton.IsEnabled = _whisperEngine?.IsInitialized == true;
+    }
+
+    private async void TranscribeFileButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (string.IsNullOrEmpty(_selectedAudioFilePath) || _whisperEngine == null)
+            return;
+
+        // 若正在轉錄則取消
+        if (_fileTranscriptionCts != null)
+        {
+            _fileTranscriptionCts.Cancel();
+            return;
+        }
+
+        _fileTranscriptionCts = new CancellationTokenSource();
+
+        SetFileTranscriptionBusy(true);
+        StatusText.Text = $"轉錄檔案: {Path.GetFileName(_selectedAudioFilePath)}";
+
+        try
+        {
+            var service = new FileTranscriptionService(_whisperEngine);
+
+            var progress = new Progress<FileTranscriptionProgress>(p =>
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    FileTranscriptionProgressBar.IsIndeterminate = p.IsIndeterminate;
+                    FileTranscriptionProgressBar.Value = p.ProgressPercent;
+                    StatusText.Text = p.Message;
+                });
+            });
+
+            var result = await service.TranscribeFileAsync(
+                _selectedAudioFilePath, progress, _fileTranscriptionCts.Token);
+
+            if (!string.IsNullOrWhiteSpace(result))
+            {
+                var fileName = Path.GetFileNameWithoutExtension(_selectedAudioFilePath);
+                TranscriptionTextBox.AppendText($"── 檔案: {fileName} ──\n{result}\n\n");
+                TranscriptionTextBox.ScrollToEnd();
+                StatusText.Text = $"檔案轉錄完成: {fileName}";
+
+                // 如果啟用翻譯，翻譯轉錄結果
+                if (_isTranslationEnabled && !string.IsNullOrWhiteSpace(result))
+                {
+                    await TranslateTextAsync(result, "file");
+                }
+            }
+            else
+            {
+                StatusText.Text = "轉錄結果為空（檔案可能沒有語音）";
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            StatusText.Text = "檔案轉錄已取消";
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"檔案轉錄失敗: {ex}");
+            MessageBox.Show($"轉錄失敗：{ex.Message}", "錯誤", MessageBoxButton.OK, MessageBoxImage.Error);
+            StatusText.Text = $"轉錄失敗: {ex.Message}";
+        }
+        finally
+        {
+            _fileTranscriptionCts?.Dispose();
+            _fileTranscriptionCts = null;
+            SetFileTranscriptionBusy(false);
+        }
+    }
+
+    private void SetFileTranscriptionBusy(bool busy)
+    {
+        BrowseAudioFileButton.IsEnabled = !busy;
+        WhisperEngineComboBox.IsEnabled = !busy;
+        InitializeButton.IsEnabled = !busy;
+
+        if (busy)
+        {
+            TranscribeFileButton.Content = "⏹ 取消轉錄";
+            TranscribeFileButton.Background = System.Windows.Media.Brushes.OrangeRed;
+            FileTranscriptionProgressBar.Visibility = Visibility.Visible;
+            FileTranscriptionProgressBar.Value = 0;
+        }
+        else
+        {
+            TranscribeFileButton.Content = "▶ 開始轉錄";
+            TranscribeFileButton.Background =
+                new System.Windows.Media.SolidColorBrush(
+                    (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#FF00BCD4"));
+            FileTranscriptionProgressBar.Visibility = Visibility.Collapsed;
+            FileTranscriptionProgressBar.IsIndeterminate = false;
+        }
     }
 
     private string? GetSelectedLanguage()
@@ -1220,6 +1341,8 @@ public partial class MainWindow : Window
         _translationService?.Dispose();
         _ttsService?.Dispose();
         _cts?.Dispose();
+        _fileTranscriptionCts?.Cancel();
+        _fileTranscriptionCts?.Dispose();
     }
 
     private void WhisperEngineComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)

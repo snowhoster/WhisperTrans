@@ -6,11 +6,12 @@ using WhisperTrans.Core.Models;
 namespace WhisperTrans.Core.Engines;
 
 /// <summary>
-/// »·ºİ Whisper ASR API ¤ŞÀº
+/// é ç«¯ Whisper ASR API å¼•æ“
 /// </summary>
 public class RemoteWhisperEngine : IWhisperEngine
 {
     private readonly HttpClient _httpClient;
+    private readonly HttpClient _fileHttpClient; // é•· timeoutï¼Œç”¨æ–¼æª”æ¡ˆä¸Šå‚³
     private WhisperConfig? _config;
     private bool _disposed;
     private string _apiUrl = string.Empty;
@@ -20,200 +21,207 @@ public class RemoteWhisperEngine : IWhisperEngine
 
     public RemoteWhisperEngine()
     {
-        _httpClient = new HttpClient();
-        _httpClient.Timeout = TimeSpan.FromSeconds(30);
+        _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+        _fileHttpClient = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
     }
 
     public Task InitializeAsync(WhisperConfig config, CancellationToken cancellationToken = default)
     {
         _config = config;
-        
-        // ÀË¬d»·ºİ API URL ¬O§_³]©w
+
         if (string.IsNullOrWhiteSpace(config.RemoteApiUrl))
-        {
-            throw new ArgumentException("»·ºİ API URL ¥¼³]©w", nameof(config));
-        }
+            throw new ArgumentException("é ç«¯ API URL æœªè¨­å®š", nameof(config));
 
         _apiUrl = config.RemoteApiUrl.TrimEnd('/');
-        
-        // ½T«O API URL ¥]§t /asr ºİÂI
+
         if (!_apiUrl.EndsWith("/asr", StringComparison.OrdinalIgnoreCase))
-        {
             _apiUrl += "/asr";
-        }
 
         IsInitialized = true;
-        
-        System.Diagnostics.Debug.WriteLine($"»·ºİ Whisper ASR ¤wªì©l¤Æ: {_apiUrl}");
-        
+
+        System.Diagnostics.Debug.WriteLine($"é ç«¯ Whisper ASR å·²åˆå§‹åŒ–: {_apiUrl}");
+
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// è½‰éŒ„éŸ³è¨Šç‰‡æ®µï¼ˆå³æ™‚éŒ„éŸ³è·¯å¾‘ï¼Œå‚³å…¥ float[] å†è½‰ WAVï¼‰
+    /// </summary>
     public async Task<TranscriptionResult> TranscribeAsync(AudioSegment segment, CancellationToken cancellationToken = default)
     {
         if (!IsInitialized || _config == null)
-        {
-            throw new InvalidOperationException("¤ŞÀº©|¥¼ªì©l¤Æ");
-        }
+            throw new InvalidOperationException("å¼•æ“å°šæœªåˆå§‹åŒ–");
 
         var startTime = DateTime.Now;
 
-        try
+        var wavData = ConvertToWav(segment.Samples, segment.SampleRate);
+
+        using var content = new MultipartFormDataContent();
+        var audioContent = new ByteArrayContent(wavData);
+        audioContent.Headers.ContentType = new MediaTypeHeaderValue("audio/wav");
+        content.Add(audioContent, "audio_file", "audio.wav");
+
+        var requestUrl = BuildRequestUrl(_apiUrl, _config);
+
+        System.Diagnostics.Debug.WriteLine($"ASR è«‹æ±‚: {requestUrl} ({wavData.Length} bytes)");
+
+        var response = await _httpClient.PostAsync(requestUrl, content, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        var resultText = await response.Content.ReadAsStringAsync(cancellationToken);
+        var processingTime = (DateTime.Now - startTime).TotalMilliseconds;
+
+        System.Diagnostics.Debug.WriteLine($"ASR çµæœ: {resultText} ({processingTime:F0}ms)");
+
+        return new TranscriptionResult
         {
-            // ±N­µ°T¼Æ¾ÚÂà´«¬° WAV ®æ¦¡
-            var wavData = ConvertToWav(segment.Samples, segment.SampleRate);
+            Text = resultText.Trim(),
+            Timestamp = segment.StartTime,
+            ProcessingTimeMs = (long)processingTime,
+            Confidence = 1.0f,
+            IsFinal = true,
+            Language = _config.Language ?? "unknown"
+        };
+    }
 
-            // ·Ç³Æ multipart/form-data
-            using var content = new MultipartFormDataContent();
-            
-            // ²K¥[­µ°TÀÉ®×
-            var audioContent = new ByteArrayContent(wavData);
-            audioContent.Headers.ContentType = new MediaTypeHeaderValue("audio/wav");
-            content.Add(audioContent, "audio_file", "audio.wav");
+    /// <summary>
+    /// ç›´æ¥ä¸Šå‚³éŸ³è¨Šæª”æ¡ˆï¼ˆMP3ã€WAV ç­‰ï¼‰ï¼Œç”±é ç«¯ ffmpeg è™•ç†æ ¼å¼è½‰æ›
+    /// </summary>
+    public async Task<string> TranscribeRawFileAsync(
+        string filePath,
+        IProgress<FileTranscriptionProgress>? progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (!IsInitialized || _config == null)
+            throw new InvalidOperationException("å¼•æ“å°šæœªåˆå§‹åŒ–");
 
-            // «Ø¥ß½Ğ¨D URL with query parameters
-            var requestUrl = BuildRequestUrl(_apiUrl, _config);
+        if (!File.Exists(filePath))
+            throw new FileNotFoundException($"æ‰¾ä¸åˆ°æª”æ¡ˆï¼š{filePath}");
 
-            System.Diagnostics.Debug.WriteLine($"µo°e ASR ½Ğ¨D: {requestUrl}");
-            System.Diagnostics.Debug.WriteLine($"­µ°T¤j¤p: {wavData.Length} bytes");
-
-            // µo°e½Ğ¨D
-            var response = await _httpClient.PostAsync(requestUrl, content, cancellationToken);
-            
-            // ÀË¬d¦^À³
-            response.EnsureSuccessStatusCode();
-
-            // Åª¨ú¦^À³
-            var resultText = await response.Content.ReadAsStringAsync(cancellationToken);
-            
-            var processingTime = (DateTime.Now - startTime).TotalMilliseconds;
-
-            System.Diagnostics.Debug.WriteLine($"ASR ¦^À³: {resultText}");
-            System.Diagnostics.Debug.WriteLine($"³B²z®É¶¡: {processingTime}ms");
-
-            return new TranscriptionResult
-            {
-                Text = resultText.Trim(),
-                Timestamp = segment.StartTime,
-                ProcessingTimeMs = (long)processingTime,
-                Confidence = 1.0f, // »·ºİ API ³q±`¤£´£¨Ñ«H¤ß«×
-                IsFinal = true,
-                Language = _config.Language ?? "unknown"
-            };
-        }
-        catch (HttpRequestException ex)
+        progress?.Report(new FileTranscriptionProgress
         {
-            System.Diagnostics.Debug.WriteLine($"ASR HTTP ¿ù»~: {ex.Message}");
-            throw new Exception($"»·ºİ ASR ½Ğ¨D¥¢±Ñ: {ex.Message}", ex);
-        }
-        catch (Exception ex)
+            Message = "ä¸Šå‚³æª”æ¡ˆè‡³é ç«¯ API...",
+            IsIndeterminate = true,
+            ProgressPercent = 0
+        });
+
+        var fileName = Path.GetFileName(filePath);
+        var mimeType = GetMimeType(filePath);
+
+        var fileBytes = await File.ReadAllBytesAsync(filePath, cancellationToken);
+
+        using var content = new MultipartFormDataContent();
+        var audioContent = new ByteArrayContent(fileBytes);
+        audioContent.Headers.ContentType = new MediaTypeHeaderValue(mimeType);
+        content.Add(audioContent, "audio_file", fileName);
+
+        // encode=true è®“é ç«¯ä¼ºæœå™¨ç”¨ ffmpeg è™•ç†æ ¼å¼
+        var requestUrl = BuildRequestUrl(_apiUrl, _config);
+
+        System.Diagnostics.Debug.WriteLine($"ä¸Šå‚³æª”æ¡ˆ: {fileName} ({fileBytes.Length / 1024}KB) â†’ {requestUrl}");
+
+        var startTime = DateTime.Now;
+        var response = await _fileHttpClient.PostAsync(requestUrl, content, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        var resultText = await response.Content.ReadAsStringAsync(cancellationToken);
+        var elapsed = (DateTime.Now - startTime).TotalMilliseconds;
+
+        System.Diagnostics.Debug.WriteLine($"é ç«¯è½‰éŒ„å®Œæˆ ({elapsed:F0}ms): {resultText}");
+
+        progress?.Report(new FileTranscriptionProgress
         {
-            System.Diagnostics.Debug.WriteLine($"ASR ¿ù»~: {ex.Message}");
-            throw;
-        }
+            Message = "è½‰éŒ„å®Œæˆ",
+            IsIndeterminate = false,
+            ProgressPercent = 100,
+            CurrentChunk = 1,
+            TotalChunks = 1
+        });
+
+        return resultText.Trim();
     }
 
     public async Task<IEnumerable<TranscriptionResult>> TranscribeBatchAsync(IEnumerable<AudioSegment> segments, CancellationToken cancellationToken = default)
     {
         var results = new List<TranscriptionResult>();
-        
         foreach (var segment in segments)
         {
             var result = await TranscribeAsync(segment, cancellationToken);
             results.Add(result);
         }
-        
         return results;
     }
 
     private string BuildRequestUrl(string baseUrl, WhisperConfig config)
     {
-        var queryParams = new List<string>();
+        var queryParams = new List<string> { "encode=true", "task=transcribe" };
 
-        // encode °Ñ¼Æ
-        queryParams.Add("encode=true");
-
-        // task °Ñ¼Æ (transcribe ©Î translate)
-        queryParams.Add("task=transcribe");
-
-        // language °Ñ¼Æ
         if (!string.IsNullOrWhiteSpace(config.Language))
-        {
             queryParams.Add($"language={config.Language}");
-        }
 
-        // initial_prompt °Ñ¼Æ¡]¦pªG»İ­n¡^
         if (!string.IsNullOrWhiteSpace(config.InitialPrompt))
-        {
             queryParams.Add($"initial_prompt={Uri.EscapeDataString(config.InitialPrompt)}");
-        }
 
-        // output °Ñ¼Æ
         queryParams.Add("output=txt");
 
         return $"{baseUrl}?{string.Join("&", queryParams)}";
     }
 
-    private byte[] ConvertToWav(float[] audioData, int sampleRate)
+    private static byte[] ConvertToWav(float[] audioData, int sampleRate)
     {
-        // ±N float32 ­µ°T¼Æ¾ÚÂà´«¬° int16 PCM
         var pcmData = new short[audioData.Length];
-        for (int i = 0; i < audioData.Length; i++)
+        for (var i = 0; i < audioData.Length; i++)
         {
-            var sample = audioData[i];
-            
-            // ­­¨î½d³ò¦b -1.0 ¨ì 1.0
-            sample = Math.Clamp(sample, -1.0f, 1.0f);
-            
-            // Âà´«¬° int16
+            var sample = Math.Clamp(audioData[i], -1.0f, 1.0f);
             pcmData[i] = (short)(sample * short.MaxValue);
         }
 
-        // «Ø¥ß WAV ÀÉ®×
-        using var memoryStream = new MemoryStream();
-        using var writer = new BinaryWriter(memoryStream);
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
 
-        // WAV ÀÉÀY
-        var channels = 1;
-        var bitsPerSample = 16;
+        const int channels = 1;
+        const int bitsPerSample = 16;
         var byteRate = sampleRate * channels * bitsPerSample / 8;
         var blockAlign = channels * bitsPerSample / 8;
         var dataSize = pcmData.Length * 2;
 
-        // RIFF header
         writer.Write(Encoding.ASCII.GetBytes("RIFF"));
         writer.Write(36 + dataSize);
         writer.Write(Encoding.ASCII.GetBytes("WAVE"));
-
-        // fmt chunk
         writer.Write(Encoding.ASCII.GetBytes("fmt "));
-        writer.Write(16); // chunk size
-        writer.Write((short)1); // audio format (PCM)
+        writer.Write(16);
+        writer.Write((short)1);
         writer.Write((short)channels);
         writer.Write(sampleRate);
         writer.Write(byteRate);
         writer.Write((short)blockAlign);
         writer.Write((short)bitsPerSample);
-
-        // data chunk
         writer.Write(Encoding.ASCII.GetBytes("data"));
         writer.Write(dataSize);
-        
-        // ¼g¤J PCM ¼Æ¾Ú
         foreach (var sample in pcmData)
-        {
             writer.Write(sample);
-        }
 
-        return memoryStream.ToArray();
+        return ms.ToArray();
     }
+
+    private static string GetMimeType(string filePath) =>
+        Path.GetExtension(filePath).ToLowerInvariant() switch
+        {
+            ".mp3" => "audio/mpeg",
+            ".wav" => "audio/wav",
+            ".m4a" => "audio/mp4",
+            ".aac" => "audio/aac",
+            ".ogg" => "audio/ogg",
+            ".wma" => "audio/x-ms-wma",
+            ".flac" => "audio/flac",
+            _ => "application/octet-stream"
+        };
 
     public void Dispose()
     {
-        if (_disposed)
-            return;
-
+        if (_disposed) return;
         _httpClient?.Dispose();
+        _fileHttpClient?.Dispose();
         _disposed = true;
         GC.SuppressFinalize(this);
     }

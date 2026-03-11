@@ -23,6 +23,7 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
@@ -132,8 +133,51 @@
                 </Grid>
             </GroupBox>
 
+            <!-- 音訊檔案轉錄區域 -->
+            <GroupBox Header="📂 音訊檔案轉錄" Grid.Row="2" Margin="0,0,0,10">
+                <Grid Margin="5,5,5,5">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- 檔案路徑 -->
+                    <TextBox x:Name="FileTranscriptionPathTextBox"
+                             Grid.Row="0" Grid.Column="0"
+                             Padding="5" Margin="0,0,5,5"
+                             IsReadOnly="True"
+                             Text="請選擇音訊檔案 (MP3、WAV、M4A ...)"
+                             Foreground="Gray"
+                             VerticalContentAlignment="Center"/>
+                    <Button x:Name="BrowseAudioFileButton"
+                            Grid.Row="0" Grid.Column="1"
+                            Content="選擇檔案" Width="80"
+                            Margin="0,0,5,5"
+                            Click="BrowseAudioFileButton_Click"/>
+                    <Button x:Name="TranscribeFileButton"
+                            Grid.Row="0" Grid.Column="2"
+                            Content="▶ 開始轉錄" Width="90"
+                            Margin="0,0,0,5"
+                            Background="#FF00BCD4" Foreground="White"
+                            FontWeight="Bold"
+                            IsEnabled="False"
+                            Click="TranscribeFileButton_Click"/>
+
+                    <!-- 進度列 -->
+                    <ProgressBar x:Name="FileTranscriptionProgressBar"
+                                 Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3"
+                                 Height="6" Minimum="0" Maximum="100" Value="0"
+                                 Visibility="Collapsed"/>
+                </Grid>
+            </GroupBox>
+
             <!-- 轉錄結果區域 -->
-            <GroupBox Header="轉錄結果" Grid.Row="2" Margin="0,0,0,10">
+            <GroupBox Header="轉錄結果" Grid.Row="3" Margin="0,0,0,10">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <TextBox x:Name="TranscriptionTextBox" 
                              TextWrapping="Wrap" 
@@ -147,7 +191,7 @@
             </GroupBox>
 
             <!-- 控制按鈕 -->
-            <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,10">
+            <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,10">
                 <Button x:Name="StartStopButton" 
                         Content="🎤 開始錄音" 
                         Width="120" Height="40" 
@@ -176,7 +220,7 @@
             </StackPanel>
 
             <!-- 狀態列 -->
-            <Border Grid.Row="4" Background="#FF263238" Padding="10,5">
+            <Border Grid.Row="5" Background="#FF263238" Padding="10,5">
                 <TextBlock x:Name="StatusText" 
                            Text="請先初始化系統" 
                            Foreground="White" 
